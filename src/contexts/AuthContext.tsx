@@ -1,24 +1,34 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as SecureStore from 'expo-secure-store';
-import { auth } from '../services/api';
+import { auth, AuthResponse } from '../services/api';
+
+type RootStackParamList = {
+  Login: undefined;
+  Register: undefined;
+  MainTabs: undefined;
+};
 
 interface User {
-  id: string;
+  _id: string;
   fullName: string;
   email: string;
-  enrollmentNo: string;
-  role: 'student' | 'teacher';
+  enrollmentNo?: string;
+  role: 'student' | 'teacher' | 'admin';
 }
 
 type AuthContextType = {
   isAuthenticated: boolean;
   user: User | null;
-  login: (enrollmentNo: string, password: string) => Promise<void>;
+  login: (data: { enrollmentNo?: string, email?: string; password: string }) => Promise<void>;
   register: (data: {
-    enrollmentNo: string;
+    enrollmentNo?: string;
     email: string;
     password: string;
     fullName: string;
+    role: 'student' | 'teacher' | 'admin';
+    faceEmbedding?: number[];
   }) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -28,6 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
     checkAuthState();
@@ -37,23 +48,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const token = await SecureStore.getItemAsync('token');
       const userData = await SecureStore.getItemAsync('user');
-      
       if (token && userData) {
         try {
           const parsedUser = JSON.parse(userData) as User;
-          if (parsedUser.id && parsedUser.fullName && parsedUser.role) {
+          if (parsedUser._id && parsedUser.fullName && parsedUser.role) {
             setIsAuthenticated(true);
             setUser(parsedUser);
           } else {
-            // Invalid user data stored, clear it
             await SecureStore.deleteItemAsync('token');
             await SecureStore.deleteItemAsync('user');
+            await SecureStore.deleteItemAsync('role');
           }
         } catch (parseError) {
           console.error('Error parsing stored user data:', parseError);
-          // Invalid JSON stored, clear it
           await SecureStore.deleteItemAsync('token');
           await SecureStore.deleteItemAsync('user');
+          await SecureStore.deleteItemAsync('role');
         }
       }
     } catch (error) {
@@ -61,74 +71,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (enrollmentNo: string, password: string) => {
+  const login = async (data: { enrollmentNo?: string, email?: string; password: string }) => {
     try {
-      const response = await auth.login({ enrollmentNo, password });
-      if (!response.data.token || !response.data.user) {
+      const response = await auth.login(data);
+      const { token, user } = response;
+      if (!token || !user) {
         throw new Error('Invalid response from server');
       }
-      
-      // Make sure we store strings
-      const token = String(response.data.token);
-      const userData = JSON.stringify(response.data.user);
-      
       await SecureStore.setItemAsync('token', token);
-      await SecureStore.setItemAsync('user', userData);
-      
+      await SecureStore.setItemAsync('user', JSON.stringify(user));
+      await SecureStore.setItemAsync('role', user.role);
       setIsAuthenticated(true);
-      setUser(response.data.user);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      setUser(user);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Login failed';
+      console.error('Login error:', message, error);
+      throw new Error(message);
     }
   };
 
   const register = async (data: {
-    enrollmentNo: string;
+    enrollmentNo?: string;
     email: string;
     password: string;
     fullName: string;
+    role: 'student' | 'teacher' | 'admin';
+    faceEmbedding?: number[];
   }) => {
     try {
-      // First, try to register the user
-      await auth.register({ ...data, role: 'student' });
-      
-      // If registration is successful, immediately try to login
-      const loginResponse = await auth.login({
-        enrollmentNo: data.enrollmentNo,
-        password: data.password
-      });
-
-      if (!loginResponse.data.token || !loginResponse.data.user) {
-        throw new Error('Invalid response from server after registration');
+      const response = await auth.register(data);
+      const { token, user } = response;
+      if (!token || !user) {
+        throw new Error('Invalid response from server');
       }
-      
-      // Make sure we store strings
-      const token = String(loginResponse.data.token);
-      const userData = JSON.stringify(loginResponse.data.user);
-      
       await SecureStore.setItemAsync('token', token);
-      await SecureStore.setItemAsync('user', userData);
-      
+      await SecureStore.setItemAsync('user', JSON.stringify(user));
+      await SecureStore.setItemAsync('role', user.role);
       setIsAuthenticated(true);
-      setUser(loginResponse.data.user);
-    } catch (error) {
-      console.error('Registration error:', error);
-      throw error;
+      setUser(user);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Registration failed';
+      console.error('Registration error:', message, error);
+      throw new Error(message);
     }
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await SecureStore.deleteItemAsync('token');
       await SecureStore.deleteItemAsync('user');
+      await SecureStore.deleteItemAsync('role');
       setIsAuthenticated(false);
       setUser(null);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
     } catch (error) {
       console.error('Logout error:', error);
-      throw error;
+      throw new Error('Logout failed');
     }
-  };
+  }, [navigation]);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, login, register, logout }}>
@@ -137,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
