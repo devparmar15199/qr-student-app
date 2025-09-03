@@ -1,239 +1,109 @@
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
-import { Text, Card, TextInput, ActivityIndicator, Snackbar, Button, RadioButton } from 'react-native-paper';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet } from 'react-native';
+import { Text, Card, TextInput, ActivityIndicator, Snackbar, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
-import { audit, AuditLog } from '../services/api';
-
-type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  MainTabs: undefined;
-};
-
-type TabParamList = {
-  Home: undefined;
-  Scan: undefined;
-  Classes: undefined;
-  Profile: undefined;
-  AttendanceManagement: { classId: string };
-  AuditLogs: undefined;
-};
+import { audit } from '../services/api';
+import { TabParamList, AuditLog } from '../types';
+import { UseDebounce } from '../hooks/useDebounce';
+import ScreenContainer from '../components/common/ScreenContainer';
+import UnauthorizedAccess from '../components/common/UnauthorizedAccess';
 
 type Props = NativeStackScreenProps<TabParamList, 'AuditLogs'>;
 
-const AuditLogsScreen = ({ navigation }: Props) => {
+const AuditLogsScreen = () => {
   const { user } = useAuth();
+  const { colors } = useTheme();
+
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+
+  // Filter state
   const [userIdFilter, setUserIdFilter] = useState('');
-  const [actionFilter, setActionFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'success' | 'failed' | ''>('');
+  const debouncedUserId = UseDebounce(userIdFilter, 500); // Debounce user input
 
-  useEffect(() => {
-    fetchLogs();
-  }, [userIdFilter, actionFilter, startDate, endDate, statusFilter]);
-
-  const fetchLogs = async () => {
-    setError('');
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const response = await audit.getLogs({
-        userId: userIdFilter || undefined,
-        action: actionFilter || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        status: statusFilter || undefined,
-      });
+      const response = await audit.getLogs({ userId: debouncedUserId || undefined });
       setLogs(response.data);
     } catch (err: any) {
       setError(err.message || 'Failed to load audit logs');
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedUserId]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchLogs();
-    setRefreshing(false);
-  };
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
+  // Role check
   if (user?.role !== 'admin') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>This screen is for admins only</Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('Home')}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-        >
-          Back to Home
-        </Button>
-      </View>
-    );
+    return <UnauthorizedAccess message="This screen is for admins only." />;
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} enabled={!loading} />
-        }
-      >
-        <Text style={styles.title}>Audit Logs</Text>
-        <View style={styles.filterContainer}>
-          <Text style={styles.sectionTitle}>Filters</Text>
+    <ScreenContainer onRefresh={fetchLogs} refreshing={loading}>
+      <Text style={styles.title}>Audit Logs</Text>
+
+      <Card style={styles.card}>
+        <Card.Content>
           <TextInput
-            label="User ID"
+            label="Filter by User ID"
             value={userIdFilter}
             onChangeText={setUserIdFilter}
             mode="outlined"
             style={styles.input}
-            disabled={loading || refreshing}
-            theme={{ roundness: 8 }}
+            disabled={loading}
           />
-          <TextInput
-            label="Action"
-            value={actionFilter}
-            onChangeText={setActionFilter}
-            mode="outlined"
-            style={styles.input}
-            disabled={loading || refreshing}
-            theme={{ roundness: 8 }}
-          />
-          <TextInput
-            label="Start Date (YYYY-MM-DD)"
-            value={startDate}
-            onChangeText={setStartDate}
-            mode="outlined"
-            style={styles.input}
-            disabled={loading || refreshing}
-            theme={{ roundness: 8 }}
-          />
-          <TextInput
-            label="End Date (YYYY-MM-DD)"
-            value={endDate}
-            onChangeText={setEndDate}
-            mode="outlined"
-            style={styles.input}
-            disabled={loading || refreshing}
-            theme={{ roundness: 8 }}
-          />
-          <Text style={styles.subTitle}>Status</Text>
-          <RadioButton.Group
-            onValueChange={(value) => setStatusFilter(value as 'success' | 'failed' | '')}
-            value={statusFilter}
-          >
-            <View style={styles.radioOption}>
-              <RadioButton value="" disabled={loading || refreshing} />
-              <Text style={styles.radioText}>All</Text>
-            </View>
-            <View style={styles.radioOption}>
-              <RadioButton value="success" disabled={loading || refreshing} />
-              <Text style={styles.radioText}>Success</Text>
-            </View>
-            <View style={styles.radioOption}>
-              <RadioButton value="failed" disabled={loading || refreshing} />
-              <Text style={styles.radioText}>Failed</Text>
-            </View>
-          </RadioButton.Group>
-        </View>
-        {loading ? (
-          <ActivityIndicator animating={true} size="large" style={styles.loader} />
-        ) : logs.length === 0 ? (
-          <Text style={styles.noData}>No audit logs found</Text>
-        ) : (
-          logs.map((log) => (
-            <Card key={log._id} style={styles.card}>
-              <Card.Content>
-                <Text style={styles.logTitle}>Action: {log.action}</Text>
-                <Text>User: {log.userId.fullName}</Text>
-                <Text>Status: {log.status}</Text>
-                <Text>Date: {new Date(log.createdAt).toLocaleString()}</Text>
-                <Text>Details: {JSON.stringify(log.details)}</Text>
-              </Card.Content>
-            </Card>
-          ))
-        )}
-      </ScrollView>
+        </Card.Content>
+      </Card>
+
+      {loading && logs.length === 0 ? (
+        <ActivityIndicator size="large" style={styles.loader} />
+      ) : logs.length === 0 ? (
+        <Text style={styles.noData}>No audit logs found.</Text>
+      ) : (
+        logs.map((log) => (
+          <Card key={log._id} style={styles.card}>
+            <Card.Title
+              title={log.action}
+              subtitle={`User: ${log.userId.fullName}`}
+              right={() => <Text style={{ color: log.status === 'success' ? 'green' : colors.error }}>{log.status}</Text>}
+            />
+            <Card.Content>
+              <Text>Date: {new Date(log.createdAt).toLocaleString()}</Text>
+            </Card.Content>
+          </Card>
+        ))
+      )}
       <Snackbar
         visible={!!error}
         onDismiss={() => setError('')}
         duration={4000}
-        style={styles.snackbar}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setError(''),
-        }}
+        style={{ backgroundColor: colors.error }}
       >
         {error}
       </Snackbar>
-    </View>
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  contentContainer: {
-    padding: 24,
-    paddingBottom: 40,
-  },
   title: {
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 20,
-    color: '#1a1a1a',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-    color: '#1a1a1a',
-  },
-  subTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#1a1a1a',
-  },
-  filterContainer: {
-    marginBottom: 20,
-  },
-  input: {
-    marginBottom: 16,
-    backgroundColor: '#fff',
-  },
-  radioOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  radioText: {
-    fontSize: 14,
-    color: '#1a1a1a',
   },
   card: {
     marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 8,
   },
-  logTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#1a1a1a',
+  input: {
+    marginBottom: 0,
   },
   loader: {
     marginTop: 20,
@@ -242,29 +112,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 20,
-    color: '#1a1a1a',
-  },
-  message: {
-    fontSize: 18,
-    color: '#d32f2f',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  button: {
-    marginTop: 12,
-    backgroundColor: '#6200ea',
-    borderRadius: 8,
-  },
-  buttonContent: {
-    paddingVertical: 8,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  snackbar: {
-    backgroundColor: '#d32f2f',
-    borderRadius: 8,
   },
 });
 

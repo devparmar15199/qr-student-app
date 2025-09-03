@@ -1,28 +1,23 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Snackbar } from 'react-native-paper';
+import { Text, Button, Snackbar, useTheme, Avatar } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
-
-type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  MainTabs: undefined;
-};
-
-type TabParamList = {
-  Home: undefined;
-  Scan: undefined;
-  Classes: undefined;
-  Profile: undefined;
-  AttendanceManagement: { classId: string };
-  AuditLogs: undefined;
-};
+import { TabParamList } from '../types';
+import ScreenContainer from '../components/common/ScreenContainer';
 
 type Props = NativeStackScreenProps<TabParamList, 'Profile'>;
 
+const ProfileInfoRow = ({ label, value }: { label: string; value?: string }) => (
+  <View style={styles.infoRow}>
+    <Text style={styles.label}>{label}</Text>
+    <Text style={styles.value}>{value || 'N/A'}</Text>
+  </View>
+);
+
 const ProfileScreen = ({ navigation }: Props) => {
   const { user, logout } = useAuth();
+  const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,134 +28,84 @@ const ProfileScreen = ({ navigation }: Props) => {
       await logout();
     } catch (err: any) {
       setError(err.message || 'Failed to log out');
-    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
-      <View style={styles.infoContainer}>
-        <Text style={styles.label}>Name:</Text>
-        <Text style={styles.value}>{user?.fullName || 'N/A'}</Text>
-        <Text style={styles.label}>Enrollment Number:</Text>
-        <Text style={styles.value}>{user?.enrollmentNo || 'Not provided'}</Text>
-        <Text style={styles.label}>Email:</Text>
-        <Text style={styles.value}>{user?.email || 'N/A'}</Text>
-        <Text style={styles.label}>Role:</Text>
-        <Text style={styles.value}>{user?.role || 'N/A'}</Text>
+    <ScreenContainer>
+      <View style={styles.header}>
+        <Avatar.Text size={80} label={user?.fullName.charAt(0) || 'U'} />
+        <Text style={styles.title}>{user?.fullName}</Text>
+        <Text style={styles.role}>{user?.role}</Text>
       </View>
-      {user?.role === 'teacher' && (
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('Classes')}
-          style={styles.actionButton}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          disabled={loading}
-        >
-          Manage Attendance
-        </Button>
-      )}
-      {user?.role === 'admin' && (
-        <>
-          <Button
-            mode="contained"
-            onPress={() => navigation.navigate('AuditLogs')}
-            style={styles.actionButton}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
-            disabled={loading}
-          >
-            View Audit Logs
-          </Button>
-          <Button
-            mode="contained"
-            onPress={() => navigation.navigate('Classes')}
-            style={styles.actionButton}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
-            disabled={loading}
-          >
-            Manage Classes
-          </Button>
-        </>
-      )}
+
+      <View style={styles.infoContainer}>
+        <ProfileInfoRow label="Email" value={user?.email} />
+        {user?.role === 'student' && <ProfileInfoRow label="Enrollment No." value={user?.enrollmentNo} />}
+      </View>
+
+      <View style={styles.actionsContainer}>
+        {/* Role specific action buttons can go here */}
+      </View>
+
       <Button
         mode="contained"
         onPress={handleLogout}
         loading={loading}
         disabled={loading}
-        style={styles.logoutButton}
-        contentStyle={styles.buttonContent}
-        labelStyle={styles.buttonLabel}
+        style={[styles.logoutButton, { backgroundColor: colors.error }]}
+        icon="logout"
       >
         Logout
       </Button>
+
       <Snackbar
         visible={!!error}
         onDismiss={() => setError('')}
         duration={4000}
-        style={styles.snackbar}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setError(''),
-        }}
+        style={{ backgroundColor: colors.error }}
       >
         {error}
       </Snackbar>
-    </View>
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    backgroundColor: '#f5f5f5',
+  header: {
+    alignItems: 'center',
+    marginBottom: 30,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 24,
-    color: '#1a1a1a',
+    marginTop: 16,
+  },
+  role: {
+    fontSize: 16,
+    textTransform: 'capitalize',
+    color: '#757575',
   },
   infoContainer: {
     marginBottom: 24,
   },
+  infoRow: {
+    marginBottom: 16,
+  },
   label: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#757575',
     marginBottom: 4,
   },
   value: {
     fontSize: 16,
-    color: '#1a1a1a',
-    marginBottom: 16,
   },
-  actionButton: {
-    marginBottom: 12,
-    backgroundColor: '#6200ea',
-    borderRadius: 8,
+  actionsContainer: {
+    flex: 1,
   },
   logoutButton: {
     marginTop: 'auto',
-    backgroundColor: '#d32f2f',
-    borderRadius: 8,
-  },
-  buttonContent: {
-    paddingVertical: 8,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  snackbar: {
-    backgroundColor: '#d32f2f',
-    borderRadius: 8,
   },
 });
 

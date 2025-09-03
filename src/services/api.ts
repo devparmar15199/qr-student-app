@@ -1,129 +1,15 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { InterfaceOrientation } from 'react-native-reanimated';
+import * as T from '../types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
-
-export interface AttendanceSubmission {
-  sessionId: string;
-  classId: string;
-  scheduleId: string;
-  studentCoordinates: Coordinates;
-  livenessPassed: boolean;
-  faceEmbedding: number[];
-}
-
-export interface ManualAttendance {
-  studentId: string;
-  classId: string;
-  scheduleId: string;
-  status?: 'present' | 'late' | 'absent';
-  attendedAt?: string;
-}
-
-export interface Class {
-  _id: string;
-  classNumber: string;
-  subjectCode: string;
-  subjectName: string;
-  classYear: string;
-  semester: string;
-  division: string;
-  teacherId: string;
-}
-
-export interface Schedule {
-  _id: string;
-  classId: string;
-  sessionType: string;
-  dayOfWeek: string;
-  startTime: string;
-  endTime: string;
-  roomNumber: string;
-  semester: string;
-  academicYear: string;
-  location: { latitude: number; longitude: number };
-}
-
-export interface User {
-  _id: string;
-  fullName: string;
-  enrollmentNo?: string;
-  email: string;
-  role: 'student' | 'teacher' | 'admin';
-}
-
-export interface Attendance {
-  _id: string;
-  studentId: User;
-  sessionId?: { qrPayload: { timestamp: string } };
-  classId: Class;
-  scheduleId: Schedule;
-  studentCoordinates?: Coordinates;
-  attendedAt: string;
-  livenessPassed: boolean;
-  faceEmbedding: number[];
-  synced: boolean;
-  syncVersion: number;
-  manualEntry: boolean;
-  status: 'present' | 'late' | 'absent';
-}
-
-export interface AttendanceResponse {
-  attendance: Attendance[];
-  stats: {
-    total: number;
-    present: number;
-    late: number;
-    absent: number;
-    manualEntries?: number;
-  };
-}
-
-export interface AuditLog {
-  _id: string;
-  userId: User;
-  action: string;
-  details: any;
-  status: 'success' | 'failed';
-  createdAt: string;
-}
-
-export interface QRValidateResponse {
-  valid: boolean;
-  sessionId: string;
-  classId: string;
-  scheduleId: string;
-}
-
-export interface SyncResponse {
-  success: number;
-  failed: number;
-  skipped: number;
-  details: Array<{
-    status: 'success' | 'failed' | 'skipped';
-    error?: string;
-    data: AttendanceSubmission
-  }>;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: User;
-}
-
 const api = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
 
+// Request Interceptor to add the token
 api.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync('token');
   if (token) {
@@ -132,148 +18,166 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Response Interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const message = error.response?.data?.error || error.message || 'Unknown error';
+    const message = error.response?.data?.error || error.message || 'An Unknown error occurred';
     if (error.response?.status === 401) {
       await SecureStore.deleteItemAsync('token');
       await SecureStore.deleteItemAsync('user');
       await SecureStore.deleteItemAsync('role');
       throw new Error('Session expired. Please log in again.');
     }
-    console.error('API Error:', message);
+    console.error('API Error:', message, error.response?.data);
     throw new Error(message);
   }
 );
 
-const checkRole = async (requiredRoles: string[]): Promise<boolean> => {
-  const role = await SecureStore.getItemAsync('role');
+// Reusable Role Check Logic
+type UserRole = 'student' | 'teacher' | 'admin';
+
+const checkRole = async (requiredRoles: UserRole[]): Promise<boolean> => {
+  const role = (await SecureStore.getItemAsync('role')) as UserRole | null;
   return role ? requiredRoles.includes(role) : false;
 }
 
+// Higher-Order Function to wrap API calls with a role check
+const withRoleCheck = <T extends any[], R>(
+  apiCall: (...args: T) => Promise<R>,
+  requiredRoles: UserRole[]
+) => {
+  return async (...args: T): Promise<R> => {
+    const hasPermission = await checkRole(requiredRoles);
+    if (!hasPermission) {
+      throw new Error(`Unauthorized: Requires one of [${requiredRoles.join(', ')}] roles.`);
+    }
+    return apiCall(...args);
+  };
+};
+
+// API Endpoints
 export const auth = {
-  login: async (data: { enrollmentNo?: string; email?: string; password: string }) => {
-    const response = await api.post<AuthResponse>('/auth/login', data);
-    return response.data;
+  login: (data: { enrollmentNo?: string; email?: string; password: string }) => {
+    return api.post<T.AuthResponse>('/auth/login', data).then(res => res.data);
   },
-  register: async (data: {  
+  register: (data: {  
     enrollmentNo?: string;
     email: string;
     password: string;
     fullName: string;
-    role: 'student' | 'teacher' | 'admin';
+    role: UserRole;
     faceEmbedding?: number[];
   }) => {
-    const response = await api.post<AuthResponse>('/auth/register', data);
-    return response.data;
+    return api.post<T.AuthResponse>('/auth/register', data).then(res => res.data);
   },
 };
 
 export const users = {
-  getStudents: async () => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.get<User[]>('/users?role=student');
-  },
+  // GET /users (teacher, admin)
+  getAll: withRoleCheck(
+    (query: { role?: string; search?: string; limit?: number; page?: number } = {}) => 
+      api.get('/users', { params: query }).then(res => res.data),
+    ['teacher', 'admin']
+  ),
+  // POST /users (admin)
+  create: withRoleCheck(
+    (data: Omit<T.User, '_id'>) => 
+      api.post<T.User>('/users', data).then(res => res.data),
+    ['admin']
+  ),
+  // GET /users/profile (auth)
+  getProfile: () => api.get<T.User>('/users/profile').then(res => res.data),
+  // PUT /users/profile (auth)
+  updateProfile: (data: Omit<T.User, '_id' | 'role' | 'password'>) => 
+    api.put<T.User>('/users/profile', data).then(res => res.data),
+  // PUT /users/change-password (auth)
+  changePassword: (data: { currentPassword: string; newPassword: string }) => 
+      api.put('/users/change-password', data).then(res => res.data),
+  // GET /users/:id (admin)
+  getById: withRoleCheck(
+    (id: string) => api.get<T.User>(`/users/${id}`).then(res => res.data),
+    ['admin']
+  ),
 };
 
 export const attendance = {
-  submit: async (data: AttendanceSubmission) => {
-    if (!(await checkRole(['student']))) {
-      throw new Error('Unauthorized: Student role required');
-    }
-    return api.post<Attendance>('/attendances', data);
-  },
-  sync: async (offlineAttendance: AttendanceSubmission[]) => {
-    if (!(await checkRole(['student']))) {
-      throw new Error('Unauthorized: Student role required');
-    }
-    return api.post<SyncResponse>('/attendances/sync', { attendances: offlineAttendance });
-  },
-  getByClass: async (classId: string, query: { startDate?: string; endDate?: string; status?: string } = {}) => {
-    if (!(await checkRole(['teacher', 'admin', 'student']))) {
-      throw new Error('Unauthorized: Teacher, admin, or student role required');
-    }
-    return api.get<AttendanceResponse>(`/attendances/records/class/${classId}`, { params: query });
-  },
-  manual: async (data: ManualAttendance) => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.post<Attendance>('/attendances/manual', data);
-  },
-  getAll: async (query: { startDate?: string; endDate?: string; status?: string } = {}) => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.get<Attendance[]>('/attendances/records', { params: query });
-  },
-  getByStudent: async (studentId: string, query: { startDate?: string; endDate?: string; classId?: string } = {}) => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.get<AttendanceResponse>(`/attendances/records/student/${studentId}`, { params: query });
-  }
+  // POST /attendances (student)
+  submit: withRoleCheck(
+    (data: T.AttendanceSubmission) => api.post<T.Attendance>('/attendances', data),
+    ['student']
+  ),
+  sync: withRoleCheck(
+    (data: T.AttendanceSubmission[]) => api.post<T.SyncResponse>('/attendances/sync', { attendances: data }),
+    ['student']
+  ),
+  getByClass: withRoleCheck(
+    (classId: string, query: { startDate?: string; endDate?: string; status?: string } = {}) =>
+      api.get<T.AttendanceResponse>(`/attendances/records/class/${classId}`, { params: query }),
+    ['teacher', 'admin', 'student']
+  ),
+  manual: withRoleCheck(
+    (data: T.ManualAttendance) => api.post<T.Attendance>('/attendances/manual', data),
+    ['teacher', 'admin']
+  ),
+  getAll: withRoleCheck(
+    (query: { startDate?: string; endDate?: string; status?: string } = {}) =>
+      api.get<T.Attendance[]>('/attendances/records', { params: query }),
+    ['teacher', 'admin']
+  ),
+  getByStudent: withRoleCheck(
+    (studentId: string, query: { startDate?: string; endDate?: string; classId?: string } = {}) =>
+      api.get<T.AttendanceResponse>(`/attendances/records/student/${studentId}`, { params: query }),
+    ['teacher', 'admin']
+  ),
 };
 
 export const classes = {
-  getAll: () => api.get<Class[]>('/classes'),
-  create: async (data: Omit<Class, '_id'>) => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.post<Class>('/classes', data);
-  },
-  enrollStudent: async (data: { classId: string; studentId: string }) => {
-    if (!(await checkRole(['admin']))) {
-      throw new Error('Unauthorized: Admin role required');
-    }
-    return api.post<{ message: string }>('/classes/enroll', data);
-  },
-  getEnrolled: async () => {
-    if (!(await checkRole(['student']))) {
-      throw new Error('Unauthorized: Student role required');
-    }
-    return api.get<Class[]>('/classes/enrolled');
-  },
-  getTeacherClasses: async () => {
-    if (!(await checkRole(['teacher']))) {
-      throw new Error('Unauthorized: Teacher role required');
-    }
-    return api.get<Class[]>('/classes/teacher');
-  }
+  getAll: () => api.get<T.Class[]>('/classes'),
+  create: withRoleCheck(
+    (data: Omit<T.Class, '_id'>) =>
+      api.post<T.Class>('/classes', data),
+    ['teacher', 'admin']
+  ),
+  enrollStudent: withRoleCheck(
+    (data: { classId: string; studentId: string }) =>
+      api.post<{ message: string }>('/classes/enroll', data),
+    ['admin']
+  ),
+  getEnrolled: withRoleCheck(
+    () => api.get<T.Class[]>('/classes/enrolled'),
+    ['student']
+  ),
+  getTeacherClasses: withRoleCheck(
+    () => api.get<T.Class[]>('/classes/teacher'),
+    ['teacher']
+  ),
 };
 
 export const schedule = {
-  create: async (data: Omit<Schedule, '_id'>) => {
-    if (!(await checkRole(['teacher', 'admin']))) {
-      throw new Error('Unauthorized: Teacher or admin role required');
-    }
-    return api.post<Schedule>('/schedules', data);
-  },
-  getByClass: (classId: string) => api.get<Schedule[]>(`/schedules/${classId}`),
+  create: withRoleCheck(
+    (data: Omit<T.Schedule, '_id'>) =>
+      api.post<T.Schedule>('/schedules', data),
+    ['teacher', 'admin']
+  ),
+  getByClass: (classId: string) => api.get<T.Schedule[]>(`/schedules/${classId}`),
 };
 
 export const qr = {
-  generate: async (data: { classId: string; scheduleId: string; teacherId: string; coordinates: Coordinates; }) => {
-    if (!(await checkRole(['teacher']))) {
-      throw new Error('Unauthorized: Teacher role required');
-    }
-    return api.post<{ sessionId: string; token: string; expiredAt: string }>('/qr/generate', data);
-  },
-  validate: (data: { token: string }) =>
-    api.post<{ valid: boolean; sessionId: string }>('/qr/validate', data),
+  generate: withRoleCheck(
+    (data: { classId: string; scheduleId: string, teacherId: string; coordinates: T.Coordinates }) =>
+      api.post<{ sessionId: string; token: string; expiredAt: string }>('/qr/generate', data),
+    ['teacher']
+  ),
+  validate: (data: { token: string }) => api.post<{ valid: boolean; sessionId: string }>('/qr/validate', data),
 };
 
 export const audit = {
-  getLogs: async (query: { userId?: string; action?: string; startDate?: string; endDate?: string; status?: string } = {}) => {
-    if (!(await checkRole(['admin']))) {
-      throw new Error('Unauthorized: Admin role required');
-    }
-    return api.get<AuditLog[]>('/audit-logs', { params: query });
-  },
+  getLogs: withRoleCheck(
+    (query: { userId?: string; action?: string; startDate?: string; endDate?: string; status?: string } = {}) =>
+      api.get<T.AuditLog[]>('/audit-logs', { params: query }),
+    ['admin']
+  ),
 };
 
 export default api;

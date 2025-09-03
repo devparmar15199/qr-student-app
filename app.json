@@ -41,23 +41,24 @@
     "plugins": [
       "expo-secure-store",
       "expo-file-system",
-      [
-        "react-native-vision-camera",
-        {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for face recognition and attendance scanning."
-        }
-      ],
-      [
-        "react-native-fast-tflite",
-        {
-          "enableCoreMLDelegate": true
-        }
-      ],
+      // [
+      //   "react-native-vision-camera",
+      //   {
+      //     "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for face recognition and attendance scanning."
+      //   }
+      // ],
+      // [
+      //   "react-native-fast-tflite",
+      //   {
+      //     "enableCoreMLDelegate": true
+      //   }
+      // ],
       "expo-asset",
       [
         "expo-build-properties",
         {
           "android": {
+            "minSdkVersion": 26,
             "compileSdkVersion": 34,
             "targetSdkVersion": 34,
             "buildToolsVersion": "34.0.0",

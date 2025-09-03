@@ -3,69 +3,57 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useTheme } from 'react-native-paper';
+
 import { useAuth } from '../contexts/AuthContext';
+import { RootStackParamList, TabParamList } from '../types';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
-import ClassesScreen from '../screens/ClassesScreen';
 import ScanScreen from '../screens/ScanScreen';
+import ClassesScreen from '../screens/ClassesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AttendanceManagementScreen from '../screens/AttendanceManagementScreen';
 import AuditLogsScreen from '../screens/AuditLogsScreen';
 
-// Define navigation types
-type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  MainTabs: undefined;
-};
-
-type TabParamList = {
-  Home: undefined;
-  Scan: undefined;
-  Classes: undefined;
-  Profile: undefined;
-  AttendanceManagement: { classId: string };
-  AuditLogs: undefined;
-};
+// Import Components
+import FullScreenLoader from '../components/FullScreenLoader';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+// A map for tab icons to make the code cleaner and more scalable
+const tabIconMap: Record<keyof TabParamList, 
+  { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
+    Home: { focused: 'home', unfocused: 'home-outline' },
+    Scan: { focused: 'qr-code', unfocused: 'qr-code-outline' },
+    Classes: { focused: 'book', unfocused: 'book-outline' },
+    Profile: { focused: 'person', unfocused: 'person-outline' },
+    AttendanceManagement: { focused: 'checkbox', unfocused: 'checkbox-outline' },
+    AuditLogs: { focused: 'list', unfocused: 'list-outline' },
+};
+
 const TabNavigator = () => {
   const { user } = useAuth();
+  const theme = useTheme(); // Use the theme from PaperProvider
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = "home";
-          
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Scan') {
-            iconName = focused ? 'qr-code' : 'qr-code-outline';
-          } else if (route.name === 'Classes') {
-            iconName = focused ? 'book' : 'book-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'AttendanceManagement') {
-            iconName = focused ? 'checkbox' : 'checkbox-outline';
-          } else if (route.name === 'AuditLogs') {
-            iconName = focused ? 'list' : 'list-outline';
-          }
+          const icons = tabIconMap[route.name];
+          const iconName = focused ? icons.focused : icons.unfocused;
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#6200ea',
+        tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: '#757575',
         tabBarStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: theme.colors.background,
           borderTopColor: '#e0e0e0',
-          borderTopWidth: 1,
         },
-      })}
+      })} 
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       {user?.role === 'student' && <Tab.Screen name="Scan" component={ScanScreen} />}
@@ -84,18 +72,23 @@ const TabNavigator = () => {
 };
 
 const Navigation = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // The loading check should only be here, at the top level.
+  if (isLoading) {
+    return <FullScreenLoader />;
+  }
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
+        {isAuthenticated ? (
+          <Stack.Screen name="MainTabs" component={TabNavigator} />
+        ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
           </>
-        ) : (
-          <Stack.Screen name="MainTabs" component={TabNavigator} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

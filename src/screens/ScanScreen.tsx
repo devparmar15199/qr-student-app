@@ -1,29 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Snackbar } from 'react-native-paper';
-import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
-import { scanBarcodes, BarcodeFormat } from 'vision-camera-code-scanner';
+import { Text, Button, Snackbar, overlay } from 'react-native-paper';
+import { CameraView, BarcodeScanningResult, Camera, BarcodeType } from 'expo-camera';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
-import { attendance, qr, QRValidateResponse } from '../services/api';
-import { getFaceEmbedding } from '../utils/tflite';
-import { runOnJS } from 'react-native-reanimated';
-
-type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  MainTabs: undefined;
-};
-
-type TabParamList = {
-  Home: undefined;
-  Scan: undefined;
-  Classes: undefined;
-  Profile: undefined;
-  AttendanceManagement: { classId: string };
-  AuditLogs: undefined;
-};
+import { attendance, qr } from '../services/api';
+import { RootStackParamList, TabParamList } from '../types';
 
 type Props = NativeStackScreenProps<TabParamList, 'Scan'>;
 
@@ -36,7 +19,6 @@ const ScanScreen = ({ navigation }: Props) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [facing, setFacing] = useState<'front' | 'back'>('back');
-  const device = useCameraDevice(facing);
 
   useEffect(() => {
     checkPermissions();
@@ -44,17 +26,16 @@ const ScanScreen = ({ navigation }: Props) => {
 
   const checkPermissions = async () => {
     setError('');
-    const cameraStatus = await Camera.requestCameraPermission();
-    setHasCameraPermission(cameraStatus === 'granted');
+    const cameraStatus = await Camera.requestCameraPermissionsAsync();
+    setHasCameraPermission(cameraStatus.status === 'granted');
     const locationStatus = await Location.requestForegroundPermissionsAsync();
     setHasLocationPermission(locationStatus.status === 'granted');
   };
 
   const requestPermissions = async () => {
-    setError('');
     await checkPermissions();
     if (!hasCameraPermission || !hasLocationPermission) {
-      setError('Please grant camera and location permissions to proceed');
+      setError('Please grant camera and location permissions to proceed.');
     }
   };
 
@@ -63,10 +44,11 @@ const ScanScreen = ({ navigation }: Props) => {
   };
 
   const handleBarCodeScanned = useCallback(
-    async (barcodes: any[]) => {
-      if (loading || scanned || barcodes.length === 0) return;
-      const qrCode = barcodes[0]?.value;
-      if (!qrCode) return;
+    async (scanningResult: BarcodeScanningResult) => {
+      if (loading || scanned) return;
+      const data = scanningResult.data;
+
+      if (!data) return;
 
       setScanned(true);
       setLoading(true);
@@ -74,25 +56,24 @@ const ScanScreen = ({ navigation }: Props) => {
       setSuccess('');
 
       try {
-        // Validate QR code
-        const validateResponse = await qr.validate({ token: qrCode });
+        // Validate QR code on the server
+        const validateResponse = await qr.validate({ token: data });
+
         if (!validateResponse.data.valid) {
           throw new Error('Invalid or expired QR code');
         }
-        const { sessionId, classId, scheduleId } = validateResponse.data as QRValidateResponse;
+        
+        const { sessionId, classId, scheduleId } = validateResponse.data;
 
         // Get current location
         if (!hasLocationPermission) {
-          throw new Error('Location permission denied');
+          throw new Error('Location permission denied.');
         }
         const location = await Location.getCurrentPositionAsync({});
 
-        // Assume face embedding is processed server-side or pre-registered
-        // For liveness, we can use a simple check (e.g., face detected in frame)
-        // Replace with actual face recognition logic if needed
-        let faceEmbedding: number[] = [];
-        let livenessPassed = true; // Server-side validation recommended
-
+        // Submit attendane with QR data, location, and face recognition placeholder
+        // Note: livenessPassed and faceEmbedding are placeholders.
+        // Implement actual logic for these features.
         await attendance.submit({
           sessionId,
           classId,
@@ -101,8 +82,8 @@ const ScanScreen = ({ navigation }: Props) => {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           },
-          livenessPassed,
-          faceEmbedding,
+          livenessPassed: true,
+          faceEmbedding: [],
         });
 
         setSuccess('Attendance marked successfully!');
@@ -115,29 +96,26 @@ const ScanScreen = ({ navigation }: Props) => {
     [loading, scanned, hasLocationPermission]
   );
 
-  const frameProcessor = useFrameProcessor((frame) => {
-    'worklet';
-    if (scanned || loading) return;
-    const barcodes = scanBarcodes(frame, [BarcodeFormat.QR_CODE]);
-    if (barcodes.length > 0) {
-      runOnJS(handleBarCodeScanned)(barcodes);
-    }
-  }, [handleBarCodeScanned, scanned, loading]);
+  // Conditional Rendering based on permissions and user role
+  if (user?.role !== 'student') {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>This screen is for students only.</Text>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('Home')}
+          style={styles.button}
+        >
+          Back to Home
+        </Button>
+      </View>
+    );
+  }
 
   if (hasCameraPermission === null || hasLocationPermission === null) {
     return (
       <View style={styles.container}>
         <Text style={styles.message}>Requesting permissions...</Text>
-        <Button
-          mode="contained"
-          onPress={requestPermissions}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          disabled={loading}
-        >
-          Request Permissions
-        </Button>
       </View>
     );
   }
@@ -146,55 +124,14 @@ const ScanScreen = ({ navigation }: Props) => {
     return (
       <View style={styles.container}>
         <Text style={styles.message}>
-          {!hasCameraPermission && 'Camera permission denied'}
-          {!hasCameraPermission && !hasLocationPermission && ' and '}
-          {!hasLocationPermission && 'Location permission denied'}
+          Permission not granted. Please enable both camera and location access.
         </Text>
         <Button
           mode="contained"
           onPress={requestPermissions}
           style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          disabled={loading}
         >
-          Request Permissions
-        </Button>
-      </View>
-    );
-  }
-
-  if (user?.role !== 'student') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>This screen is for students only</Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('Home')}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          disabled={loading}
-        >
-          Back to Home
-        </Button>
-      </View>
-    );
-  }
-
-  if (!device) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>No camera device available</Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('Home')}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          disabled={loading}
-        >
-          Back to Home
+          Grant Permissions
         </Button>
       </View>
     );
@@ -202,48 +139,49 @@ const ScanScreen = ({ navigation }: Props) => {
 
   return (
     <View style={styles.container}>
-      <Camera
+      <CameraView
         style={StyleSheet.absoluteFillObject}
-        device={device}
-        isActive={!scanned && !loading}
-        frameProcessor={frameProcessor}
-        fps={5}
+        facing={facing}
+        // barcodeScanning
+        onBarcodeScanned={handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ['qr'] as BarcodeType[],
+        }}
       />
       <View style={styles.overlay}>
         <View style={styles.qrFrame} />
       </View>
-      {scanned && (
+      <View style={styles.bottomButtons}>
+        {scanned && (
+          <Button
+            mode="contained"
+            onPress={() => {
+              setScanned(false);
+              setError('');
+              setSuccess('');
+            }}
+            loading={loading}
+            disabled={loading}
+            style={styles.button}
+          >
+            Scan Again
+          </Button>
+        )}
         <Button
-          mode="contained"
-          onPress={() => setScanned(false)}
-          loading={loading}
+          mode="outlined"
+          onPress={changeFacing}
           disabled={loading}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
+          style={styles.flipButton}
+          labelStyle={styles.flipButtonLabel}
         >
-          Scan Again
+          Flip Camera
         </Button>
-      )}
-      <Button
-        mode="outlined"
-        onPress={changeFacing}
-        disabled={loading}
-        style={styles.flipButton}
-        contentStyle={styles.buttonContent}
-        labelStyle={styles.buttonLabel}
-      >
-        Flip Camera
-      </Button>
+      </View>
       <Snackbar
         visible={!!error}
         onDismiss={() => setError('')}
         duration={4000}
         style={styles.snackbar}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setError(''),
-        }}
       >
         {error}
       </Snackbar>
@@ -252,10 +190,6 @@ const ScanScreen = ({ navigation }: Props) => {
         onDismiss={() => setSuccess('')}
         duration={4000}
         style={styles.successSnackbar}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setSuccess(''),
-        }}
       >
         {success}
       </Snackbar>
@@ -271,7 +205,8 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 18,
     textAlign: 'center',
-    marginBottom: 20,
+    marginHorizontal: 20,
+    marginTop: 50,
     color: '#1a1a1a',
   },
   button: {
@@ -281,20 +216,15 @@ const styles = StyleSheet.create({
   },
   flipButton: {
     margin: 16,
-    backgroundColor: 'transparent',
     borderColor: '#6200ea',
     borderWidth: 1,
     borderRadius: 8,
   },
-  buttonContent: {
-    paddingVertical: 8,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+  flipButtonLabel: {
+    color: '#6200ea',
   },
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -306,13 +236,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'transparent',
   },
+  bottomButtons: {
+    position: 'absolute',
+    bottom: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
   snackbar: {
     backgroundColor: '#d32f2f',
     borderRadius: 8,
+    bottom: 0,
   },
   successSnackbar: {
     backgroundColor: '#4caf50',
     borderRadius: 8,
+    bottom: 0,
   },
 });
 
