@@ -28,7 +28,7 @@ const AuditLogsScreen = () => {
     setError('');
     try {
       const response = await audit.getLogs({ userId: debouncedUserId || undefined });
-      setLogs(response.data);
+      setLogs(response);
     } catch (err: any) {
       setError(err.message || 'Failed to load audit logs');
     } finally {

@@ -17,6 +17,12 @@ import ClassesScreen from '../screens/ClassesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AttendanceManagementScreen from '../screens/AttendanceManagementScreen';
 import AuditLogsScreen from '../screens/AuditLogsScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
+import ClassDetailsScreen from '../screens/ClassDetailsScreen';
+import UserManagementScreen from '../screens/UserManagementScreen';
+import RoomManagementScreen from '../screens/RoomManagementScreen';
+import ScheduleManagementScreen from '../screens/ScheduleManagementScreen';
+import TimeSlotManagementScreen from '../screens/TimeSlotManagementScreen';
 
 // Import Components
 import FullScreenLoader from '../components/FullScreenLoader';
@@ -33,6 +39,10 @@ const tabIconMap: Record<keyof TabParamList,
     Profile: { focused: 'person', unfocused: 'person-outline' },
     AttendanceManagement: { focused: 'checkbox', unfocused: 'checkbox-outline' },
     AuditLogs: { focused: 'list', unfocused: 'list-outline' },
+    UserManagement: { focused: 'people', unfocused: 'people-outline' },
+    RoomManagement: { focused: 'location', unfocused: 'location-outline' },
+    ScheduleManagement: { focused: 'calendar', unfocused: 'calendar-outline' },
+    TimeSlotManagement: { focused: 'time', unfocused: 'time-outline' },
 };
 
 const TabNavigator = () => {
@@ -59,14 +69,24 @@ const TabNavigator = () => {
       {user?.role === 'student' && <Tab.Screen name="Scan" component={ScanScreen} />}
       <Tab.Screen name="Classes" component={ClassesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
-      {user?.role === 'teacher' && (
-        <Tab.Screen
-          name="AttendanceManagement"
-          component={AttendanceManagementScreen}
-          initialParams={{ classId: '' }}
-        />
+      {(user?.role === 'teacher' || user?.role === 'admin') && (
+        <>
+          <Tab.Screen
+            name="AttendanceManagement"
+            component={AttendanceManagementScreen}
+            initialParams={{ classId: '' }}
+          />
+          <Tab.Screen name="ScheduleManagement" component={ScheduleManagementScreen} />
+          <Tab.Screen name="RoomManagement" component={RoomManagementScreen} />
+        </>
       )}
-      {user?.role === 'admin' && <Tab.Screen name="AuditLogs" component={AuditLogsScreen} />}
+      {user?.role === 'admin' && (
+        <>
+          <Tab.Screen name="AuditLogs" component={AuditLogsScreen} />
+          <Tab.Screen name="UserManagement" component={UserManagementScreen} />
+          <Tab.Screen name="TimeSlotManagement" component={TimeSlotManagementScreen} />
+        </>
+      )}
     </Tab.Navigator>
   );
 };
@@ -83,7 +103,15 @@ const Navigation = () => {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="MainTabs" component={TabNavigator} />
+          <>
+            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+            <Stack.Screen name="ClassDetails" component={ClassDetailsScreen} />
+            <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+            <Stack.Screen name="RoomManagement" component={RoomManagementScreen} />
+            <Stack.Screen name="ScheduleManagement" component={ScheduleManagementScreen} />
+            <Stack.Screen name="TimeSlotManagement" component={TimeSlotManagementScreen} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />

@@ -52,8 +52,9 @@ const ClassesScreen = ({ navigation }: Props) => {
       }[user.role];
 
       if (apiCall) {
+        // The API now returns the data directly
         const response = await apiCall();
-        setClassList(response.data);
+        setClassList(response);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch classes');

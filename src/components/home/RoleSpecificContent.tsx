@@ -3,10 +3,11 @@ import { StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { TabParamList } from '../../types';
+import { TabParamList, RootStackParamList } from '../../types';
 
 // Define the navigation prop type for better type safety
 type HomeScreenNavigationProp = NativeStackScreenProps<TabParamList>;
+type RootStackParamListProp = NativeStackScreenProps<RootStackParamList>;
 
 const CommonButton = (props: React.ComponentProps<typeof Button>) => (
     <Button
@@ -49,7 +50,7 @@ export const TeacherHomeContent = () => {
 };
 
 export const AdminHomeContent = () => {
-    const navigation = useNavigation<HomeScreenNavigationProp>();
+    const navigation = useNavigation<RootStackParamList>();
     return (
         <>
             <Text style={styles.instructions}>Admin Dashboard:</Text>
@@ -57,6 +58,9 @@ export const AdminHomeContent = () => {
             <Text style={styles.step}>- Monitor system activity via Audit Logs.</Text>
             <CommonButton onPress={() => navigation.navigate('AuditLogs')}>
                 View Audit Logs
+            </CommonButton>
+            <CommonButton onPress={() => navigation.navigate('UserManagement')}>
+                Manage Users
             </CommonButton>
             <CommonButton onPress={() => navigation.navigate('Classes')}>
                 Manage Classes

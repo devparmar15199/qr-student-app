@@ -32,6 +32,7 @@
     "react-native": "0.79.5",
     "react-native-fast-tflite": "^1.6.1",
     "react-native-paper": "^5.14.5",
+    "react-native-qrcode-svg": "^6.3.15",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
@@ -39,7 +40,8 @@
     "react-native-vision-camera-face-detector": "^1.8.8",
     "react-native-worklets": "^0.5.0",
     "react-native-worklets-core": "^1.6.2",
-    "vision-camera-code-scanner": "^0.2.0"
+    "vision-camera-code-scanner": "^0.2.0",
+    "react-native-svg": "15.11.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

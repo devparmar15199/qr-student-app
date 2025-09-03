@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 
 interface QRCodeGeneratorProps {
     classId: string;
-    onSuccess: (message: string) => void;
+    onSuccess: (token: string) => void;
     onError: (message: string) => void;
     loading: boolean;
 }
@@ -38,7 +38,7 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({ classId, onSuccess, o
                     longitude: location.coords.longitude,
                 },
             });
-            onSuccess(`QR Code generated: ${response.data.token}`);
+            onSuccess(`QR Code generated: ${response.token}`);
         } catch (err: any) {
             onError(err.message || 'Failed to generate QR code');
         } finally {

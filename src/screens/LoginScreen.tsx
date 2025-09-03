@@ -4,7 +4,7 @@ import { TextInput, Button, Snackbar, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types';
-import AuthContainer from '../components/Auth/AuthContainer';
+import AuthContainer from '../components/auth/AuthContainer';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 

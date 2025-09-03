@@ -3,10 +3,11 @@ import { View, StyleSheet } from 'react-native';
 import { Text, Button, Snackbar, useTheme, Avatar } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
-import { TabParamList } from '../types';
+import { RootStackParamList, TabParamList } from '../types';
 import ScreenContainer from '../components/common/ScreenContainer';
 
-type Props = NativeStackScreenProps<TabParamList, 'Profile'>;
+// We need the RootStackParamList type for navigation to ChangePasswordScreen
+type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 const ProfileInfoRow = ({ label, value }: { label: string; value?: string }) => (
   <View style={styles.infoRow}>
@@ -46,7 +47,13 @@ const ProfileScreen = ({ navigation }: Props) => {
       </View>
 
       <View style={styles.actionsContainer}>
-        {/* Role specific action buttons can go here */}
+        <Button
+          mode="outlined"
+          onPress={() => navigation.navigate('ChangePassword')}
+          style={styles.actionButton}
+        >
+          Change Password
+        </Button>
       </View>
 
       <Button
@@ -103,6 +110,11 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     flex: 1,
+    justifyContent: 'center',
+    paddingTop: 20,
+  },
+  actionButton: {
+    marginBottom: 12,
   },
   logoutButton: {
     marginTop: 'auto',

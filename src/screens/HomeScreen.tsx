@@ -37,21 +37,22 @@ const HomeScreen = ({ navigation }: Props) => {
         setLoading(true);
         setError('');
         try {
-          // Determine which API call to make based on role
-          const classApiCall = user.role === 'student' ? classes.getEnrolled : classes.getTeacherClasses;
-          const classResponse = await classApiCall();
-          const classData: Class[] = classResponse.data;
+          const schedulesResponse = await schedule.getToday();
+          const allSchedules = schedulesResponse; // The new API endpoint directly returns the schedules
+          
+          // Fetch all classes to get subject names for the cards
+          const classResponse = await classes.getAll();
+          const allClasses: Class[] = classResponse;
+          const classMap = new Map<string, string>();
+          allClasses.forEach(cls => classMap.set(cls._id, cls.subjectName));
 
-          // Fetch schedules for all classes in parallel
-          const schedulesPromises = classData.map(cls => 
-            schedule.getByClass(cls._id).then(res => 
-              res.data.map(s => ({ ...s, className: cls.subjectName }))
-            )
-          );
+          // Map schedule data to include class names
+          const schedulesWithNames = allSchedules.map(s => ({
+            ...s,
+            className: classMap.get(s.classId) || 'Unknown Class'
+          }));
 
-          const allSchedules = (await Promise.all(schedulesPromises)).flat();
-          // TODO: This logic should ideally be on the backend to fetch only upcoming classes
-          setUpcomingClasses(allSchedules.slice(0, 3));
+          setUpcomingClasses(schedulesWithNames);
         } catch (err: any) {
           setError(err.message || 'Failed to load upcoming classes');          
         } finally {
@@ -82,7 +83,7 @@ const HomeScreen = ({ navigation }: Props) => {
         <>
           {upcomingClasses.length > 0 && (
             <View>
-              <Text style={styles.sectionTitle}>Your Upcoming Classes</Text>
+              <Text style={styles.sectionTitle}>Your Upcoming Classes Today</Text>
               {upcomingClasses.map((item) => <UpcomingClassCard key={item._id} item={item} />)}
             </View>
           )}

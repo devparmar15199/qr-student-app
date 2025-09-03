@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Snackbar, overlay } from 'react-native-paper';
+import { Text, Button, Snackbar, useTheme, overlay } from 'react-native-paper';
 import { CameraView, BarcodeScanningResult, Camera, BarcodeType } from 'expo-camera';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { attendance, qr } from '../services/api';
-import { RootStackParamList, TabParamList } from '../types';
+import { TabParamList } from '../types';
 
 type Props = NativeStackScreenProps<TabParamList, 'Scan'>;
 
 const ScanScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
+  const { colors } = useTheme();
+
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
@@ -45,9 +47,9 @@ const ScanScreen = ({ navigation }: Props) => {
 
   const handleBarCodeScanned = useCallback(
     async (scanningResult: BarcodeScanningResult) => {
+      // Prevent multiple scans or actions while loading
       if (loading || scanned) return;
       const data = scanningResult.data;
-
       if (!data) return;
 
       setScanned(true);
@@ -59,11 +61,11 @@ const ScanScreen = ({ navigation }: Props) => {
         // Validate QR code on the server
         const validateResponse = await qr.validate({ token: data });
 
-        if (!validateResponse.data.valid) {
+        if (!validateResponse.valid) {
           throw new Error('Invalid or expired QR code');
         }
         
-        const { sessionId, classId, scheduleId } = validateResponse.data;
+        const { sessionId, classId, scheduleId } = validateResponse;
 
         // Get current location
         if (!hasLocationPermission) {
@@ -71,9 +73,7 @@ const ScanScreen = ({ navigation }: Props) => {
         }
         const location = await Location.getCurrentPositionAsync({});
 
-        // Submit attendane with QR data, location, and face recognition placeholder
-        // Note: livenessPassed and faceEmbedding are placeholders.
-        // Implement actual logic for these features.
+        // Submit attendane with QR data, location, and placeholders for biometrices
         await attendance.submit({
           sessionId,
           classId,
@@ -99,7 +99,7 @@ const ScanScreen = ({ navigation }: Props) => {
   // Conditional Rendering based on permissions and user role
   if (user?.role !== 'student') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={styles.message}>This screen is for students only.</Text>
         <Button
           mode="contained"
@@ -114,7 +114,7 @@ const ScanScreen = ({ navigation }: Props) => {
 
   if (hasCameraPermission === null || hasLocationPermission === null) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={styles.message}>Requesting permissions...</Text>
       </View>
     );
@@ -122,7 +122,7 @@ const ScanScreen = ({ navigation }: Props) => {
 
   if (!hasCameraPermission || !hasLocationPermission) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={styles.message}>
           Permission not granted. Please enable both camera and location access.
         </Text>
@@ -142,15 +142,19 @@ const ScanScreen = ({ navigation }: Props) => {
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing={facing}
-        // barcodeScanning
-        onBarcodeScanned={handleBarCodeScanned}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} // Disable scanning if a code has already been scanned
         barcodeScannerSettings={{
           barcodeTypes: ['qr'] as BarcodeType[],
         }}
       />
+      {/* QR Code Scanner Overlay with instructions  */}
       <View style={styles.overlay}>
         <View style={styles.qrFrame} />
+        <Text style={styles.overlayText}>
+          Center the QR code here to scan
+        </Text>
       </View>
+      {/* Bottom buttons for user actions  */}
       <View style={styles.bottomButtons}>
         {scanned && (
           <Button
@@ -177,6 +181,7 @@ const ScanScreen = ({ navigation }: Props) => {
           Flip Camera
         </Button>
       </View>
+      {/* Error and Success Snackbars for user feedback  */}
       <Snackbar
         visible={!!error}
         onDismiss={() => setError('')}
@@ -235,6 +240,15 @@ const styles = StyleSheet.create({
     borderColor: '#6200ea',
     borderRadius: 8,
     backgroundColor: 'transparent',
+  },
+  overlayText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: 'center',
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 8,
   },
   bottomButtons: {
     position: 'absolute',
