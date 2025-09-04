@@ -16,7 +16,8 @@ const ScreenContainer: React.FC<Props> = ({ children, refreshing, onRefresh }) =
             style={[styles.container, { backgroundColor: colors.background }]}
             contentContainerStyle={styles.contentContainer}
             refreshControl={
-                onRefresh ? <RefreshControl refreshing={refreshing || false} onRefresh={onRefresh} /> : undefined
+                onRefresh ? <RefreshControl refreshing={refreshing || false} 
+                onRefresh={onRefresh} /> : undefined
             }
         >
             {children}

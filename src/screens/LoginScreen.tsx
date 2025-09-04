@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet } from 'react-native';
-import { TextInput, Button, Snackbar, useTheme } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput, Button, Snackbar, Text, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types';
@@ -18,7 +18,7 @@ const LoginScreen = ({ navigation }: Props) => {
 
   const handleLogin = async () => {
     setError('');
-    if (!identifier && !password) {
+    if (!identifier || !password) {
       setError('Please fill in all fields');
       return;
     }
@@ -61,6 +61,11 @@ const LoginScreen = ({ navigation }: Props) => {
         secureTextEntry
         disabled={loading}
       />
+      <View style={styles.forgotPasswordContainer}>
+        <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+          <Text style={{ color: colors.primary }}>Forgot Password?</Text>
+        </TouchableOpacity>
+      </View>
       <Button
         mode="contained"
         onPress={handleLogin}
@@ -104,6 +109,10 @@ const styles = StyleSheet.create({
   },
   textButton: {
     marginTop: 12,
+  },
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginBottom: 12,
   },
 });
 

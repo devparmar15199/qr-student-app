@@ -16,6 +16,7 @@ type AuthContextType = {
     role: 'student' | 'teacher' | 'admin';
     faceEmbedding?: number[];
   }) => Promise<void>;
+  forgotPassword: (data: { email?: string; enrollmentNo?: string }) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -89,6 +90,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const forgotPassword = async (data: {
+    enrollmentNo?: string;
+    email?: string;
+  }) => {
+    try {
+      const response = await auth.forgotPassword(data);
+    } catch (error: any) {
+      console.error('Forgot Password error:', error.message);
+      throw error;
+    }
+  };
+
   const logout = useCallback(async () => {
     try {
       await SecureStore.deleteItemAsync('token');
@@ -103,7 +116,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, isLoading, login, register, forgotPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,6 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import { theme } from './src/styles/theme';
 
 export default function App() {
-
   return (
     <PaperProvider theme={theme}>
       <ErrorBoundary>

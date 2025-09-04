@@ -2,19 +2,10 @@
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined; // New screen for password reset
   MainTabs: undefined;
-  // A dedicated screen for password changes, possibly a modal
   ChangePassword: undefined;
-  // Screens for admin/teacher roles
-  UserManagement: undefined;
-  RoomManagement: undefined;
-  ScheduleManagement: undefined;
-  TimeSlotManagement: undefined;
-  // A details screen for viewing a specific class
   ClassDetails: { classId: string };
-  // A screen to view a student's attendance records
-  StudentAttendanceDetails: { studentId: string };
-
   Profile: undefined;
 };
 
@@ -24,13 +15,6 @@ export type TabParamList = {
   Classes: undefined;
   Profile: undefined;
   AttendanceManagement: { classId: string };
-  AuditLogs: undefined;
-
-  // Screens for admin/teacher roles
-  UserManagement: undefined;
-  RoomManagement: undefined;
-  ScheduleManagement: undefined;
-  TimeSlotManagement: undefined;
 };
 
 // API & Data Models
@@ -45,7 +29,6 @@ export interface User {
   email: string;
   enrollmentNo?: string;
   role: 'student' | 'teacher' | 'admin';
-  // Include fields for updating
   password?: string;
   currentPassword?: string;
   newPassword?: string;
@@ -100,42 +83,16 @@ export interface AttendanceSubmission {
   faceEmbedding: number[];
 }
 
-export interface ManualAttendance {
-  studentId: string;
-  classId: string;
-  scheduleId: string;
-  status?: 'present' | 'late' | 'absent';
-  attendedAt?: string;
-}
-
-export interface AuditLog {
-  _id: string;
-  userId: User;
-  action: string;
-  details: any;
-  status: 'success' | 'failed';
-  createdAt: string;
+export interface QRData {
+  sessionId: string;
+  token: string;
+  expiredAt: string;
 }
 
 export interface TimeSlot {
   _id: string;
   startTime: string;
   endTime: string;
-}
-
-export interface Room {
-  _id: string;
-  roomNumber: string;
-  roomName: string;
-  capacity: number;
-  roomType: 'classroom' | 'lab' | 'auditorium' | 'other';
-  isBookable: boolean;
-}
-
-export interface QRData {
-  sessionId: string;
-  token: string;
-  expiredAt: string;
 }
 
 // API Response Types
@@ -164,10 +121,4 @@ export interface SyncResponse {
     error?: string;
     data: AttendanceSubmission
   }>;
-}
-
-export interface ConflictCheckResponse {
-  isConflict: boolean;
-  message: string;
-  conflictingSchedules?: Schedule[];
 }

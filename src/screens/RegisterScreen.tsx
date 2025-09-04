@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { TextInput, Button, Text, Snackbar, RadioButton, ActivityIndicator, useTheme } from 'react-native-paper';
+import { TextInput, Button, Text, Snackbar, RadioButton, ActivityIndicator, ProgressBar, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types';
 import AuthContainer from '../components/auth/AuthContainer';
+import symbolicateStackTrace from 'react-native/Libraries/Core/Devtools/symbolicateStackTrace';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
@@ -25,29 +26,54 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [step, setStep] = useState(1); // 1. Info, 2. Face Capture
+  const cameraRef = useRef<Camera>(null);
 
   // State for Camera Permissions
   const [permission, requestPermission] = useCameraPermissions();
 
-  const handleCaptureFace = () => {
-    // --- Placeholder for Face Capture Logic ---
-    // In a real app, you would:
-    // 1. Take a picture using the cameraRef.
-    // 2. Process the picture with your TFLite model to get the embedding.
-    // 3. Set the embedding to state.
-    console.log('Simulating face capture...');
-    // For demonstration, we'll set a mock embedding.
-    const mockEmbedding = Array.from({ length: 128 }, () => Math.random());
-    setFaceEmbedding(mockEmbedding);
-    setSuccess('Face captured successfully!');
+  const handleCaptureFace = async () => {
+    if (!cameraRef.current) {
+      setError('Camera not ready.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const photo = await cameraRef.current?.takePictureAsync();
+      // TODO: Here you would send 'photo.uri' to a backend or a
+      // local machine learning model (e.g., TensorFlow.js) to
+      // extract the face embedding. This is a complex step that
+      // requires a model and more code, so we'll use a mock for now.
+
+      // Simulating a mock embedding extraction
+      console.log('Simulating face capture and embedding extraction...');
+      const mockEmbedding = Array.from({ length: 128 }, () => Math.random());
+      setFaceEmbedding(mockEmbedding);
+      setSuccess('Face captured successfully! Proceed to register.');
+    } catch (err: any) {
+      setError('Failed to capture face. Please try again.');
+      console.log(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = async () => {
-    // (Validation logic remains similar but can be further simplified)
+    setError('');
+    // Basic validation
+    if (!fullName || !email || !password) {
+      setError('Please fill in all required fields.');
+      return;
+    }
     if (role === 'student' && !faceEmbedding) {
       setError('Face capture is required for student registration.');
       return;
     }
+
     setLoading(true);
     try {
       await register({
@@ -55,10 +81,10 @@ const RegisterScreen = ({ navigation }: Props) => {
         email,
         password,
         role,
-        enrollmentNo,
+        enrollmentNo: enrollmentNo || undefined,
         faceEmbedding: faceEmbedding || undefined,
       });
-      setSuccess('Registration successful! Redirecting...');
+      setSuccess('Registration successful! Redirecting to login...');
       setTimeout(() => navigation.replace('Login'), 2000);
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -67,26 +93,29 @@ const RegisterScreen = ({ navigation }: Props) => {
     }
   };
 
-  // 1. Show a loader while checking for permissions
+  // Permission Request Screen
   if (!permission) {
     return <ActivityIndicator style={styles.centered} />;
   }
 
-  // 2. Show a permission request screen if not granted
   if (!permission.granted) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={styles.permissionText}>We need camera access to register students.</Text>
-        <Button mode="contained" onPress={requestPermission}>Grant Permission</Button>
-        <Button mode="text" onPress={() => navigation.goBack()}>Back to Login</Button>
+        <Text style={styles.permissionText}>We need camera access for face registration for students.</Text>
+        <Button mode="contained" onPress={requestPermission} style={{ marginTop: 20 }}>
+          Grant Permission
+        </Button>
+        <Button mode="text" onPress={() => navigation.goBack()}>
+          Back to Login
+        </Button>
       </View>
     );
   }
 
-  // 3. Show the registration form once permission is granted
-  return (
-    <AuthContainer title="Create Account">
-      {/* Form Inputs  */}
+  // Multi-step form rendering
+  const renderStepOne = () => (
+    <>
+      <Text style={styles.stepTitle}>Step 1 of 2: Your Details</Text>
       <TextInput 
         label="Full Name" 
         value={fullName} 
@@ -111,16 +140,7 @@ const RegisterScreen = ({ navigation }: Props) => {
         mode="outlined"
         style={styles.input}
       />
-      <TextInput
-        label="Enrollment No. (Students)"
-        value={enrollmentNo}
-        onChangeText={setEnrollmentNo}
-        autoCapitalize="characters"
-        mode="outlined"
-        style={styles.input}
-      />
-
-      {/* Role Selection  */}
+      
       <Text style={styles.roleLabel}>Select your role:</Text>
       <RadioButton.Group onValueChange={(v) => setRole(v as any)} value={role}>
         <View style={styles.radioOption}>
@@ -133,35 +153,68 @@ const RegisterScreen = ({ navigation }: Props) => {
         </View>
       </RadioButton.Group>
 
-      {/* Camera View for Students  */}
       {role === 'student' && (
-        <View style={styles.cameraSection}>
-          <Text style={styles.roleLabel}>Face Registration</Text>
-          <CameraView style={styles.camera} facing="front" />
-          <Button icon="camera" mode="outlined" onPress={handleCaptureFace} disabled={!!faceEmbedding}>
-            {faceEmbedding ? 'Face Captured' : 'Capture Face'}
-          </Button>
-        </View>
+        <TextInput
+          label="Enrollment No. (Required)"
+          value={enrollmentNo}
+          onChangeText={setEnrollmentNo}
+          autoCapitalize="characters"
+          mode="outlined"
+          style={styles.input}
+        />
       )}
+      <Button
+        mode="contained"
+        onPress={() => setStep(2)}
+        loading={loading || !fullName || !email || !password || (role === 'student' && !enrollmentNo)}
+        style={styles.button}
+      >
+        Continue
+      </Button>
+    </>
+  );
 
-      {/* Action Buttons  */}
+  const renderStepTwo = () => (
+    <>
+      <Text style={styles.stepTitle}>Step 2 of 2: Face Recognition</Text>
+      <Text style={styles.guidanceText}>
+        Please align your face within the camera view below and tap 'Capture'.
+      </Text>
+      <View style={styles.cameraContainer}>
+        <CameraView ref={cameraRef} style={styles.camera} facing="front" />
+      </View>
+      <Button 
+        icon={faceEmbedding ? 'check-circle' : 'camera'} 
+        mode="outlined" 
+        onPress={handleCaptureFace} 
+        disabled={loading || !!faceEmbedding}
+        style={styles.button}
+      >
+        {faceEmbedding ? 'Face Captured' : 'Capture Face'}
+      </Button>
       <Button
         mode="contained"
         onPress={handleRegister}
         loading={loading}
+        disabled={loading || !faceEmbedding}
         style={styles.button}
       >
         Register
       </Button>
+    </>
+  );
+
+  return (
+    <AuthContainer title="Create Account">
+      <ProgressBar progress={step / 2} color={colors.primary} style={styles.progressBar} />
+      {step === 1 ? renderStepOne() : renderStepTwo()}
       <Button
         mode="text"
-        onPress={() => navigation.navigate('Login')}
+        onPress={() => step > 1 ? setStep(1) : navigation.navigate('Login')}
         disabled={loading}
       >
-        Already have an account? Login
+        {step > 1 ? 'Go Back' : 'Already have an account? Login'}
       </Button>
-
-      {/* Snackbars  */}
       <Snackbar
         visible={!!error}
         onDismiss={() => setError('')}
@@ -201,24 +254,42 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 4,
   },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  guidanceText: {
+    textAlign: 'center',
+    marginBottom: 15,
+    color: '#666'
+  },
+  progressBar: {
+    width: '100%',
+    marginBottom: 20,
+  },
   roleLabel: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 10,
     marginTop: 10,
+    marginBottom: 10,
   },
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  cameraSection: {
-    marginVertical: 20,
+  cameraContainer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#000',
   },
   camera: {
-    width: '100%',
-    height: 250,
-    borderRadius: 8,
-    marginBottom: 12,
+    flex: 1,
   },
 });
 
