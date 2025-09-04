@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, FlatList } from 'react-native';
-import { Text, Card, ActivityIndicator, Snackbar, useTheme } from 'react-native-paper';
+import { StyleSheet, View, FlatList, RefreshControl } from 'react-native';
+import { Text, Card, ActivityIndicator, Snackbar, useTheme, FAB } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Class, User, RootStackParamList } from '../types';
 import ScreenContainer from '../components/common/ScreenContainer';
@@ -9,86 +9,103 @@ import { classes } from '../services/api';
 type Props = NativeStackScreenProps<RootStackParamList, 'ClassDetails'>
 
 const ClassDetailsScreen = ({ route }: Props) => {
-    const { colors } = useTheme();
-    const { classId } = route.params;
+  const { colors } = useTheme();
+  const { classId } = route.params;
 
-    const [classDetails, setClassDetails] = useState<Class | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+  const [classDetails, setClassDetails] = useState<Class | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
-    const fetchClassDetails = useCallback(async () => {
-        setLoading(true);
-        setError('');
-        try {
-            const details = await classes.getById(classId);
-            setClassDetails(details);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load class details');
-        } finally {
-            setLoading(false);
-        }
-    }, [classId]);
-
-    useEffect(() => {
-        fetchClassDetails();
-    }, [fetchClassDetails]);
-
-    if (loading) {
-        return (
-        <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" />
-        </View>
-        );
+  const fetchClassDetails = useCallback(async () => {
+    setRefreshing(true);
+    setError('');
+    try {
+      const details = await classes.getById(classId);
+      setClassDetails(details);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load class details');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  }, [classId]);
 
-    if (error || !classDetails) {
-        return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error || 'Class details not found.'}</Text>
-            </View>
-        );
-    }
- 
-    const renderStudent = ({ item }: { item: User }) => (
-        <Card style={styles.studentCard}>
-            <Card.Content>
-                <Text style={styles.studentName}>{item.fullName}</Text>
-                <Text>Enrollment No: {item.enrollmentNo}</Text>
-            </Card.Content>
-        </Card>
-    );
-    
+  useEffect(() => {
+    fetchClassDetails();
+  }, [fetchClassDetails]);
+
+  if (loading && !refreshing) {
     return (
-        <ScreenContainer>
-            <View style={styles.container}>
-            <Text style={styles.title}>Class: {classDetails.classNumber}</Text>
-            <Card style={styles.detailsCard}>
-                <Card.Content>
-                    <Text style={styles.detailText}>Teacher: {classDetails.teacherId.fullName}</Text>
-                </Card.Content>
-            </Card>
-            <Text style={styles.sectionTitle}>Enrolled Students</Text>
-            {classDetails.students.length > 0 ? (
-                <FlatList
-                    data={classDetails.students}
-                    renderItem={renderStudent}
-                    keyExtractor={(item) => item._id}
-                    contentContainerStyle={styles.listContainer}
-                />
-            ) : (
-                <Text style={styles.noDataText}>No students are enrolled in this class yet.</Text>
-            )}
-            </View>
-            <Snackbar
-                visible={!!error}
-                onDismiss={() => setError('')}
-                duration={4000}
-                style={{ backgroundColor: colors.error }}
-            >
-                {error}
-            </Snackbar>
-        </ScreenContainer>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
     );
+  }
+
+  if (error || !classDetails) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error || 'Class details not found.'}</Text>
+        <FAB
+          icon="refresh"
+          label="Try Again"
+          onPress={fetchClassDetails}
+          style={styles.fab} 
+        />
+      </View>
+    );
+  }
+
+  const renderStudent = ({ item }: { item: User }) => (
+    <Card style={styles.studentCard}>
+      <Card.Content>
+        <Text style={styles.studentName}>{item.fullName}</Text>
+        <Text>Enrollment No: {item.enrollmentNo}</Text>
+      </Card.Content>
+    </Card>
+  );
+
+  return (
+    <ScreenContainer>
+      <View style={styles.container}>
+        <Text style={styles.title}>Class: {classDetails.classNumber}</Text>
+        <Card style={styles.detailsCard}>
+          <Card.Content>
+            <Text style={styles.detailText}>Teacher: {classDetails.teacherId ? classDetails.teacherId.fullName : 'N/A'}</Text>
+          </Card.Content>
+        </Card>
+        <Text style={styles.sectionTitle}>Enrolled Students</Text>
+        {classDetails.students.length > 0 ? (
+          <FlatList
+            data={classDetails.students}
+            renderItem={renderStudent}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={fetchClassDetails} />
+            }
+          />
+        ) : (
+          <Text style={styles.noDataText}>No students are enrolled in this class yet.</Text>
+        )}
+        <FAB
+          style={styles.floatingButton}
+          icon="plus"
+          label="Enroll Student"
+          onPress={() => console.log('Enroll Student button pressed')}
+        />
+      </View>
+      <Snackbar
+        visible={!!error}
+        onDismiss={() => setError('')}
+        duration={4000}
+        style={{ backgroundColor: colors.error }}
+      >
+        {error}
+      </Snackbar>
+    </ScreenContainer>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -107,6 +124,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'red',
     textAlign: 'center',
+    marginBottom: 20,
   },
   container: {
     flex: 1,
@@ -147,6 +165,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
+  floatingButton: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
+  },
+  fab: {
+    marginTop: 20,
+  }
 });
 
 export default ClassDetailsScreen;

@@ -112,6 +112,11 @@ export const classes = {
   getAll: () => api.get<T.Class[]>('/classes').then(res => res.data),
   // GET /classes/:id (auth)
   getById: (id: string) => api.get<T.Class>(`/classes/${id}`).then(res => res.data),
+  // GET /classes/enrolled (student)
+  getEnrolled: withRoleCheck(
+    () => api.get<T.Class[]>('/classes/enrolled').then(res => res.data),
+    ['student']
+  ),
 };
 
 export const qr = {

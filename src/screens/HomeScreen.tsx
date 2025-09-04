@@ -1,128 +1,92 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, ActivityIndicator, Snackbar, Card, useTheme } from 'react-native-paper';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { Text, Card, List, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-
 import { useAuth } from '../contexts/AuthContext';
-import { classes, schedule } from '../services/api';
-import { TabParamList, Class, Schedule } from '../types';
-import { StudentHomeContent, TeacherHomeContent, AdminHomeContent } from '../components/home/RoleSpecificContent';
+import { TabParamList } from '../types';
+import { StudentHomeContent } from '../components/home/RoleSpecificContent';
+import ScreenContainer from '../components/common/ScreenContainer';
 
 type Props = NativeStackScreenProps<TabParamList, 'Home'>;
-
-// A small component to display an upcoming class item
-const UpcomingClassCard = ({ item }: { item: Schedule & { className?: string } }) => {
-  return (
-    <Card style={styles.card}>
-      <Card.Title
-        title={item.className || 'Class'}
-        subtitle={`${item.dayOfWeek} ${item.startTime} - ${item.endTime} (Room: ${item.roomNumber})`}
-      />
-    </Card>
-  );
-}
 
 const HomeScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [upcomingClasses, setUpcomingClasses] = useState<(Schedule & { className?: string })[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    // Only fetch classes for students and teachers
-    if (user?.role === 'student' || user?.role === 'teacher') {
-      const fetchUpcomingClasses = async () => {
-        setLoading(true);
-        setError('');
-        try {
-          const schedulesResponse = await schedule.getToday();
-          const allSchedules = schedulesResponse; // The new API endpoint directly returns the schedules
-          
-          // Fetch all classes to get subject names for the cards
-          const classResponse = await classes.getAll();
-          const allClasses: Class[] = classResponse;
-          const classMap = new Map<string, string>();
-          allClasses.forEach(cls => classMap.set(cls._id, cls.subjectName));
-
-          // Map schedule data to include class names
-          const schedulesWithNames = allSchedules.map(s => ({
-            ...s,
-            className: classMap.get(s.classId) || 'Unknown Class'
-          }));
-
-          setUpcomingClasses(schedulesWithNames);
-        } catch (err: any) {
-          setError(err.message || 'Failed to load upcoming classes');          
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchUpcomingClasses();
-    }
-  }, [user]);
-
-  // Use useMemo to prevent re-rendering the role content unnecessarily
-  const RoleContent = useMemo(() => {
-    switch (user?.role) {
-      case 'student': return <StudentHomeContent />;
-      case 'teacher': return <TeacherHomeContent />;
-      case 'admin': return <AdminHomeContent />;
-      default: return null;
-    }
-  }, [user?.role]); 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Add any student-specific data fetching here in the future.
+    setTimeout(() => setRefreshing(false), 1000); // Simulate network request
+  }, []);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={styles.welcome}>Welcome, {user?.fullName || 'User'}!</Text>
-
-      {loading && <ActivityIndicator animating={true} size="large" style={styles.loader} />}
-
-      {!loading && (
-        <>
-          {upcomingClasses.length > 0 && (
-            <View>
-              <Text style={styles.sectionTitle}>Your Upcoming Classes Today</Text>
-              {upcomingClasses.map((item) => <UpcomingClassCard key={item._id} item={item} />)}
-            </View>
-          )}
-          {RoleContent}
-        </>
-      )}
-
-      <Snackbar
-        visible={!!error}
-        onDismiss={() => setError('')}
-        duration={4000}
-        style={{ backgroundColor: colors.error }}
+    <ScreenContainer>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
       >
-        {error}
-      </Snackbar>
+        <View style={styles.header}>
+          <Text style={styles.welcomeTitle}>Welcome back,</Text>
+          <Text style={styles.welcomeName}>{user?.fullName || 'Student'}!</Text>
+        </View>
+
+        {/* Student Quick Actions  */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text>Quick Actions</Text>
+            <List.Item
+              title="Mark Attendance"
+              description="Scan a QR code to join a class"
+              left={() => <List.Icon icon="qrcode-scan" />}
+              right={() => <List.Icon icon="chevron-right" />}
+              onPress={() => navigation.navigate('Scan')} // Navigate to Scan Tab
+              style={styles.listItem}
+            />
+            <List.Item
+              title="View My Classes"
+              description="See your enrolled subjects and schedules"
+              left={() => <List.Icon icon="google-classroom" />}
+              right={() => <List.Icon icon="chevron-right" />}
+              onPress={() => navigation.navigate('Classes')} // Navigate to Classes Tab
+              style={styles.listItem}
+            />
+          </Card.Content>
+        </Card>
+
+        {/* Main Student Content Area  */}
+        <Card style={styles.card}>
+          <Card.Content>
+            {/* The StudentHomeContent component will render here directly  */}
+            <StudentHomeContent />
+          </Card.Content>
+        </Card>
     </ScrollView>
+    </ScreenContainer>
+
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  header: {
+    paddingBottom: 24,
+    paddingTop: 16,
   },
-  welcome: {
+  welcomeTitle: {
     fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 24,
+    fontWeight: '300',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
+  welcomeName: {
+    fontSize: 32,
+    fontWeight: '700',
   },
   card: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  loader: {
-    marginTop: 20,
+  listItem: {
+    paddingHorizontal: 0,
   },
 });
 
